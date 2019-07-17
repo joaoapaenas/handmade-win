@@ -19,6 +19,10 @@ GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
         *SampleOut++ = SampleValue;
 
         tSine += 2.0f * Pi32 * 1.0f / (real32)WavePeriod;
+        if(tSine > 2.0f*Pi32)
+        {
+            tSine -= 2.0f*Pi32;
+        }
     }
 }
 
@@ -37,13 +41,13 @@ RenderWeirdGradient(game_offscreen_buffer *Buffer, int BlueOffset, int GreenOffs
 		    X < Buffer->Width;
 		    X++)
 		{
-			/*
+			/**
 			Little Endian
 			Pixel in Memory: BB GG RR xx
 			0x xxRRGGBB
 			*/
-			uint8 Blue = (X + BlueOffset);
-			uint8 Green = (Y + GreenOffset);
+			uint8 Blue = (uint8)(X + BlueOffset);
+			uint8 Green = (uint8)(Y + GreenOffset);
 
 			*Pixel++ = ((Green << 8) | Blue);
 		}
@@ -53,10 +57,77 @@ RenderWeirdGradient(game_offscreen_buffer *Buffer, int BlueOffset, int GreenOffs
 }
 
 internal void
-GameUpdateAndRender(game_offscreen_buffer *Buffer, int BlueOffset, int GreenOffset,
-                    game_sound_output_buffer *SoundBuffer, int ToneHz)
+GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer)
 {
-    /// TODO(Dennis): Allow sample offsets here for more robust platform options
-    GameOutputSound(SoundBuffer, ToneHz);
-    RenderWeirdGradient(Buffer, BlueOffset, GreenOffset);
+    Assert((&Input->Controllers[0].Terminator - &Input->Controllers[0].Buttons[0]) == (ArrayCount(Input->Controllers[0].Buttons)));
+    Assert(sizeof(game_state) <= Memory->PermanentStorageSize);
+
+    game_state *GameState = (game_state *)Memory->PermanentStorage;
+    if(!Memory->IsInitialized)
+    {
+#if HANDMADE_INTERNAL
+        char *Filename = __FILE__;
+
+        debug_read_file_result File = DEBUGPlatformReadEntireFile(Filename);
+        if(File.Contents)
+        {
+            DEBUGPlatformWriteEntireFile("test.out", File.ContentsSize, File.Contents);
+            DEBUGPlatformFreeFileMemory(File.Contents);
+        }
+#endif // HANDMADE_INTERNAL
+
+        GameState->ToneHz = 512;
+
+        /// TODO(Dennis): This may be more appropriate to do in the platform layer
+        Memory->IsInitialized = true;
+    }
+
+    for(int ControllerIndex = 0;
+        ControllerIndex < ArrayCount(Input->Controllers);
+        ++ControllerIndex)
+    {
+        game_controller_input *Controller = GetController(Input, ControllerIndex);
+        if(Controller->IsAnalog)
+        {
+            /// NOTE(Dennis): Use analog movement tuning
+            GameState->BlueOffset += (int)(4.0f*Controller->StickAverageX);
+            GameState->ToneHz = 512 + (int)(128.0f*Controller->StickAverageY);
+        }
+        else
+        {
+            /// NOTE(Dennis): Use digital movement tuning
+            if(Controller->MoveLeft.EndedDown)
+            {
+                GameState->BlueOffset -= 1;
+            }
+
+            if(Controller->MoveRight.EndedDown)
+            {
+                GameState->BlueOffset += 1;
+            }
+
+        }
+
+        /// Input.AButtonEndedDown;
+        /// Input.AButtonHalfTransitionCount;
+        if(Controller->ActionDown.EndedDown)
+        {
+            GameState->GreenOffset += 1;
+            GameState->ToneHz -= 10;
+        }
+        if(Controller->ActionUp.EndedDown)
+        {
+            GameState->GreenOffset -= 1;
+            GameState->ToneHz += 10;
+        }
+    }
+
+    RenderWeirdGradient(Buffer, GameState->BlueOffset, GameState->GreenOffset);
+}
+
+internal void
+GameGetSoundSamples(game_memory *Memory, game_sound_output_buffer *Soundbuffer)
+{
+    game_state *GameState = (game_state *)Memory->PermanentStorage;
+    GameOutputSound(Soundbuffer, GameState->ToneHz);
 }
