@@ -1,8 +1,13 @@
 @echo off
 
+set CommonCompilerFlags=-MT -nologo -Gm- -GR- -EHa- -Od -Oi -WX -W4 -wd4201 -wd4100 -wd4189 -DHANDMADE_INTERNAL=1 -DHANDMADE_SLOW=1 -DHANDMADE_WIN32=1 -FC -Z7 -Fmwin32_handmade.map
+set CommonLinkerFlags=-opt:ref -subsystem:windows,5.02 user32.lib gdi32.lib winmm.lib
+
+set File="C:\game\handmadehero\code\win32_handmade.cpp"
+
 IF NOT EXIST ..\build mkdir ..\build
 
 pushd ..\build
 
-"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.21.27702\bin\Hostx64\x64\cl.exe" -DHANDMADE_INTERNAL=1 -FC -Zi "C:\game\handmadehero\code\win32_handmade.cpp" user32.lib gdi32.lib
+cl %CommonCompilerFlags% %File% /link %CommonLinkerFlags%
 popd
