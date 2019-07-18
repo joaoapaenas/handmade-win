@@ -1,4 +1,4 @@
-/// NOTE(Dennis): Day 20 complete.
+/// NOTE(Dennis): Working on day 21, left at 50:02.
 /// TODO(Dennis): Capture Debug strings to a file?
 
 /**
@@ -22,32 +22,7 @@
    Just a partial list of stuff!
 */
 
-/// TODO(Dennis): Implement sine ourselves
-#include <math.h>
-#include <stdint.h>
-
-#define internal static
-#define local_persist static
-#define global_variable static
-
-#define Pi32 3.14159265359f
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef float real32;
-typedef double real64;
-
 #include "handmade.h"
-#include "handmade.cpp"
 
 #include <windows.h>
 #include <stdio.h>
@@ -88,8 +63,12 @@ global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 #if HANDMADE_INTERNAL
-internal debug_read_file_result
-DEBUGPlatformReadEntireFile(char *Filename)
+DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory)
+{
+    VirtualFree(Memory, 0, MEM_RELEASE);
+}
+
+DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile)
 {
     debug_read_file_result Result = {};
 
@@ -137,14 +116,7 @@ DEBUGPlatformReadEntireFile(char *Filename)
     return(Result);
 }
 
-internal void
-DEBUGPlatformFreeFileMemory(void *Memory)
-{
-    VirtualFree(Memory, 0, MEM_RELEASE);
-}
-
-internal bool32
-DEBUGPlatformWriteEntireFile(char *Filename, uint32 MemorySize, void *Memory)
+DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
 {
     bool32 Result = false;
 
@@ -172,6 +144,54 @@ DEBUGPlatformWriteEntireFile(char *Filename, uint32 MemorySize, void *Memory)
     return(Result);
 }
 #endif // HANDMADE_INTERNAL
+struct win32_game_code
+{
+    HMODULE GameCodeDLL;
+    game_update_and_render *UpdateAndRender;
+    game_get_sound_samples *GetSoundSamples;
+
+    bool32 IsValid;
+};
+
+internal win32_game_code
+Win32LoadGameCode(void)
+{
+    win32_game_code Result = {};
+
+    Result.GameCodeDLL = LoadLibraryA("handmade.exe");
+    if(Result.GameCodeDLL)
+    {
+        Result.UpdateAndRender = (game_update_and_render *)
+            GetProcAddress(Result.GameCodeDLL, "GameUpdateAndRender");
+
+        Result.GetSoundSamples = (game_get_sound_samples *)
+            GetProcAddress(Result.GameCodeDLL, "GameGetSoundSamples");
+
+        Result.IsValid = (Result.UpdateAndRender &&
+                          Result.GetSoundSamples);
+    }
+
+    if(!Result.IsValid)
+    {
+        Result.UpdateAndRender = GameUpdateAndRenderStub;
+        Result.GetSoundSamples = GameGetSoundSamplesStub;
+    }
+
+    return(Result);
+}
+
+internal void
+Win32UnloadGameCode(win32_game_code *GameCode)
+{
+    if(GameCode->GameCodeDLL)
+    {
+        FreeLibrary(GameCode->GameCodeDLL);
+    }
+
+    GameCode->IsValid = false;
+    GameCode->UpdateAndRender = GameUpdateAndRenderStub;
+    GameCode->GetSoundSamples = GameGetSoundSamplesStub;
+}
 
 internal void
 Win32LoadXInput(void)
@@ -323,11 +343,11 @@ Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
     Buffer->Info.bmiHeader.biBitCount = 32;
     Buffer->Info.bmiHeader.biCompression = BI_RGB;
 
-	int BitmapMemorySize = (Buffer->Width*Buffer->Height)*Buffer->BytesPerPixel;
-	Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-	Buffer->Pitch = Width*Buffer->BytesPerPixel;
+  int BitmapMemorySize = (Buffer->Width*Buffer->Height)*Buffer->BytesPerPixel;
+  Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+  Buffer->Pitch = Width*Buffer->BytesPerPixel;
 
-	/// TODO(Dennis): Probably clear this to black
+  /// TODO(Dennis): Probably clear this to black
 }
 
 internal void
@@ -791,7 +811,7 @@ WinMain(HINSTANCE Instance,
           SoundOutput.SamplesPerSecond = 48000;
           SoundOutput.BytesPerSample = sizeof(int16)*2;
           SoundOutput.SecondaryBufferSize = SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample;
-		  /// TODO(Dennis): Get rid of LatencySampleCount
+      /// TODO(Dennis): Get rid of LatencySampleCount
           SoundOutput.LatencySampleCount = 3*(SoundOutput.SamplesPerSecond / GameUpdateHz);
           /// TODO(Dennis): Actually compute this variance and see
           /// what the lowest reasonable value is.
@@ -836,6 +856,11 @@ WinMain(HINSTANCE Instance,
           game_memory GameMemory = {};
           GameMemory.PermanentStorageSize = Megabytes(64);
           GameMemory.TransientStorageSize = Gigabytes(1);
+#if HANDMADE_INTERNAL
+          GameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
+          GameMemory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
+          GameMemory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
+#endif
 
           /// TODO(Dennis): Handle various memory footprints (USING SYSTEM METRICS)
           uint64 TotalSize = GameMemory.PermanentStorageSize + GameMemory.TransientStorageSize;
@@ -863,6 +888,8 @@ WinMain(HINSTANCE Instance,
             uint64 LastCycleCount = __rdtsc();
             while(GlobalRunning)
             {
+                win32_game_code Game = Win32LoadGameCode();
+
                 /// TODO(Dennis): Zeroing macro
                 /// TODO(Dennis): We can't zero everything, because the up/down state will be wrong!!!
                 game_controller_input *OldKeyboardController = GetController(OldInput, 0);
@@ -998,7 +1025,7 @@ WinMain(HINSTANCE Instance,
                     Buffer.Width = GlobalBackbuffer.Width;
                     Buffer.Height = GlobalBackbuffer.Height;
                     Buffer.Pitch = GlobalBackbuffer.Pitch;
-                    GameUpdateAndRender(&GameMemory, NewInput, &Buffer);
+                    Game.UpdateAndRender(&GameMemory, NewInput, &Buffer);
 
                     LARGE_INTEGER AudioWallClock = Win32GetWallClock();
                     real32 FromBeginToAudioSeconds = Win32GetSecondsElapsed(FlipWallClock, AudioWallClock);
@@ -1082,7 +1109,7 @@ WinMain(HINSTANCE Instance,
                         SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
                         SoundBuffer.Samples = Samples;
 
-                        GameGetSoundSamples(&GameMemory, &SoundBuffer);
+                        Game.GetSoundSamples(&GameMemory, &SoundBuffer);
 
 #if HANDMADE_INTERNAL
                         /// NOTE(Dennis): Compute latency for above:
@@ -1156,7 +1183,7 @@ WinMain(HINSTANCE Instance,
                     }
 
                     LARGE_INTEGER EndCounter = Win32GetWallClock();
-                    real32 MSPerFrame = 1000.0f*Win32GetSecondsElapsed(LastCounter, EndCounter);
+                    real32 MSPerFrame = 1000.0f*Win32GetSecondsElapsed(LastCounter ,EndCounter);
                     LastCounter = EndCounter;
 
                     win32_window_dimensions Dimension = Win32GetWindowDimension(Window);
@@ -1211,6 +1238,8 @@ WinMain(HINSTANCE Instance,
                     }
 #endif // HANDMADE_INTERNAL
                 }
+
+                Win32UnloadGameCode(&Game);
             }
          }
          else
