@@ -23,8 +23,8 @@
 #include <math.h>
 #include <stdint.h>
 
-#define internal static 
-#define local_persist static 
+#define internal static
+#define local_persist static
 #define global_variable static
 
 #define Pi32 3.14159265359f
@@ -45,15 +45,19 @@ typedef double real64;
 
 #if HANDMADE_SLOW
 // TODO(casey): Complete assertion macro - don't worry everyone!
-#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
+#define Assert(Expression) \
+  if (!(Expression))       \
+  {                        \
+    *(int *)0 = 0;         \
+  }
 #else
 #define Assert(Expression)
 #endif
 
 #define Kilobytes(Value) ((Value)*1024LL)
-#define Megabytes(Value) (Kilobytes(Value)*1024LL)
-#define Gigabytes(Value) (Megabytes(Value)*1024LL)
-#define Terabytes(Value) (Gigabytes(Value)*1024LL)
+#define Megabytes(Value) (Kilobytes(Value) * 1024LL)
+#define Gigabytes(Value) (Megabytes(Value) * 1024LL)
+#define Terabytes(Value) (Gigabytes(Value) * 1024LL)
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 // TODO(casey): swap, min, max ... macros???
@@ -64,7 +68,7 @@ SafeTruncateUInt64(uint64 Value)
   // TODO(casey): Defines for maximum values
   Assert(Value <= 0xFFFFFFFF);
   uint32 Result = (uint32)Value;
-  return(Result);
+  return (Result);
 }
 
 struct thread_context
@@ -132,12 +136,11 @@ struct game_button_state
 struct game_controller_input
 {
   bool32 IsConnected;
-  bool32 IsAnalog;  
+  bool32 IsAnalog;
   real32 StickAverageX;
   real32 StickAverageY;
-  
-  union
-  {
+
+  union {
     game_button_state Buttons[12];
     struct
     {
@@ -145,12 +148,12 @@ struct game_controller_input
       game_button_state MoveDown;
       game_button_state MoveLeft;
       game_button_state MoveRight;
-      
+
       game_button_state ActionUp;
       game_button_state ActionDown;
       game_button_state ActionLeft;
       game_button_state ActionRight;
-      
+
       game_button_state LeftShoulder;
       game_button_state RightShoulder;
 
@@ -158,7 +161,7 @@ struct game_controller_input
       game_button_state Start;
 
       // NOTE(casey): All buttons must be added above this line
-      
+
       game_button_state Terminator;
     };
   };
@@ -169,15 +172,16 @@ struct game_input
   game_button_state MouseButtons[5];
   int32 MouseX, MouseY, MouseZ;
 
-  // TODO(casey): Insert clock values here.  
+  // TODO(casey): Insert clock values here.
+  real32 SecondsToAdvanceOverUpdate;
   game_controller_input Controllers[5];
 };
 inline game_controller_input *GetController(game_input *Input, int unsigned ControllerIndex)
 {
   Assert(ControllerIndex < ArrayCount(Input->Controllers));
-  
+
   game_controller_input *Result = &Input->Controllers[ControllerIndex];
-  return(Result);
+  return (Result);
 }
 
 struct game_memory
@@ -214,7 +218,7 @@ struct game_state
   int ToneHz;
   int GreenOffset;
   int BlueOffset;
-  
+
   real32 tSine;
 
   int PlayerX;
