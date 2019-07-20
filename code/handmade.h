@@ -173,7 +173,7 @@ struct game_input
   int32 MouseX, MouseY, MouseZ;
 
   // TODO(casey): Insert clock values here.
-  real32 SecondsToAdvanceOverUpdate;
+  real32 dtForFrame;
   game_controller_input Controllers[5];
 };
 inline game_controller_input *GetController(game_input *Input, int unsigned ControllerIndex)
@@ -215,6 +215,8 @@ typedef GAME_GET_SOUND_SAMPLES(game_get_sound_samples);
 
 struct game_state
 {
+  real32 PlayerX;
+  real32 PlayerY;
 };
 
 #define HANDMADE_H
